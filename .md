@@ -1,0 +1,89 @@
+# NestJS Authorization va Guards Loyihasi
+
+## Loyiha tavsifi
+
+Oddiy "Kutubxona boshqaruv tizimi" yaratilib, unda foydalanuvchilar (admin, moderator, foydalanuvchi) roli asosida turli xil funksionallikga ega bo'ladi. Tizimda kitoblar, foydalanuvchilar va kitob olingan/qaytarilgan tarixini boshqarish mumkin.
+
+## Database Schema
+
+```prisma
+// prisma/schema.prisma
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  name      String
+  role      Role     @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  borrows   Borrow[]
+}
+
+model Book {
+  id          Int      @id @default(autoincrement())
+  title       String
+  author      String
+  isbn        String   @unique
+  quantity    Int      @default(1)
+  available   Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  borrows     Borrow[]
+}
+
+model Borrow {
+  id         Int       @id @default(autoincrement())
+  user       User      @relation(fields: [userId], references: [id])
+  userId     Int
+  book       Book      @relation(fields: [bookId], references: [id])
+  bookId     Int
+  borrowDate DateTime  @default(now())
+  returnDate DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
+
+enum Role {
+  ADMIN
+  MODERATOR
+  USER
+}
+```
+
+## API Endpointlar
+
+### Authentication
+
+| Endpoint         | Method | Vazifa                      | Request Body              | Response                  | Access        |
+| ---------------- | ------ | --------------------------- | ------------------------- | ------------------------- | ------------- |
+| `/auth/register` | POST   | Ro'yxatdan o'tish           | `{email, password, name}` | `{id, email, name, role}` | Public        |
+| `/auth/login`    | POST   | Tizimga kirish              | `{email, password}`       | `{access_token, user}`    | Public        |
+| `/auth/profile`  | GET    | Profil ma'lumotlarini olish | -                         | `{id, email, name, role}` | Authenticated |
+
+### Users Management
+
+| Endpoint          | Method | Vazifa                            | Request Body | Response                    | Access       |
+| ----------------- | ------ | --------------------------------- | ------------ | --------------------------- | ------------ |
+| `/users`          | GET    | Barcha foydalanuvchilarni olish   | -            | `[{id, email, name, role}]` | Admin        |
+| `/users/:id`      | GET    | Bitta foydalanuvchini olish       | -            | `{id, email, name, role}`   | Admin, Owner |
+| `/users/:id/role` | PATCH  | Foydalanuvchi rolini o'zgartirish | `{role}`     | `{id, email, name, role}`   | Admin        |
+| `/users/:id`      | DELETE | Foydalanuvchini o'chirish         | -            | `{message}`                 | Admin        |
+
+### Books Management
+
+| Endpoint     | Method | Vazifa                  | Request Body                      | Response                                           | Access           |
+| ------------ | ------ | ----------------------- | --------------------------------- | -------------------------------------------------- | ---------------- |
+| `/books`     | GET    | Barcha kitoblarni olish | -                                 | `[{id, title, author, isbn, quantity, available}]` | Public           |
+| `/books/:id` | GET    | Bitta kitobni olish     | -                                 | `{id, title, author, isbn, quantity, available}`   | Public           |
+| `/books`     | POST   | Yangi kitob qo'shish    | `{title, author, isbn, quantity}` | `{id, title, author, isbn, quantity, available}`   | Admin, Moderator |
+| `/books/:id` | PATCH  | Kitobni yangilash       | `{title?, author?, quantity?}`    | `{id, title, author, isbn, quantity, available}`   | Admin, Moderator |
+| `/books/:id` | DELETE | Kitobni o'chirish       | -                                 | `{message}`                                        | Admin            |
+
+### Borrows Management
+
+| Endpoint              | Method | Vazifa                              | Request Body | Response                                         | Access                                  |
+| --------------------- | ------ | ----------------------------------- | ------------ | ------------------------------------------------ | --------------------------------------- |
+| `/borrows`            | GET    | Barcha olingan kitoblar             | -            | `[{id, userId, bookId, borrowDate, returnDate}]` | Admin, Moderator                        |
+| `/borrows/my`         | GET    | Foydalanuvchining olingan kitoblari | -            | `[{id, bookId, book, borrowDate, returnDate}]`   | Authenticated                           |
+| `/borrows`            | POST   | Kitob olish                         | `{bookId}`   | `{id, userId, bookId, borrowDate}`               | Authenticated                           |
+| `/borrows/:id/return` | PATCH  | Kitobni qaytarish                   | -            | `{id, userId, bookId, borrowDate, returnDate}`   | Authenticated (Owner), Admin, Moderator |
